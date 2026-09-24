@@ -129,7 +129,7 @@ async function downloadCert(courseTitle: string, userName: string, dateStr: stri
 }
 
 export default function Dashboard() {
-  const { user, progress, navigate, logout, chatLog, showToast, deleteMyAccount } = useApp();
+  const { user, progress, navigate, logout, chatLog, showToast, deleteMyAccount, certificates } = useApp();
 
   useEffect(() => {
     if (!user) navigate("/auth");
@@ -212,9 +212,9 @@ export default function Dashboard() {
         <div className="mt-14">
           <div className="flex items-center justify-between mb-6">
             <h2 className="font-d font-bold text-xl">Sertifikatlarim</h2>
-            <span className="font-mono text-[0.72rem] text-[var(--mut)]">{certs.length} ta olingan</span>
+            <span className="font-mono text-[0.72rem] text-[var(--mut)]">{certificates.length} ta olingan</span>
           </div>
-          {certs.length === 0 ? (
+          {certificates.length === 0 ? (
             <Reveal>
               <div className="flex flex-wrap items-center gap-5 rounded-xl border border-dashed border-[var(--line)] bg-[var(--surface)] px-6 py-7">
                 <div className="w-14 h-14 rounded-xl bg-[var(--surface2)] border border-[var(--line)] flex items-center justify-center shrink-0">
@@ -223,7 +223,7 @@ export default function Dashboard() {
                 <div className="flex-1 min-w-[220px]">
                   <p className="font-d font-bold text-[0.95rem]">Hozircha sertifikat yo'q</p>
                   <p className="text-[0.82rem] text-[var(--mut)] mt-1 leading-relaxed">
-                    Biror kursni 100% yakunlang — shaxsiy sertifikatingiz shu yerda paydo bo'ladi va bir bosishda PNG ko'rinishida yuklab olinadi.
+                    Kursni 100% yakunlang va yakuniy imtihondan o'ting — shaxsiy sertifikatingiz shu yerda paydo bo'ladi.
                   </p>
                 </div>
                 <button onClick={() => navigate("/courses")} className="btn-ghost !py-3 shrink-0">KURS TANLASH</button>
@@ -231,21 +231,22 @@ export default function Dashboard() {
             </Reveal>
           ) : (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {certs.map((c, i) => {
-                const when = new Date(progress[c.id].enrolledAt).toLocaleDateString("uz-UZ", { day: "numeric", month: "long", year: "numeric" });
+              {certificates.map((cert, i) => {
+                const when = new Date(cert.completedAt).toLocaleDateString("uz-UZ", { day: "numeric", month: "long", year: "numeric" });
                 return (
-                  <Reveal key={c.id} delay={i * 90}>
-                    <div className="lift group rounded-xl border border-[var(--line)] bg-[var(--surface)] p-6 h-full" style={{ ["--hover-c" as any]: c.color }}>
+                  <Reveal key={cert.id} delay={i * 90}>
+                    <div className="lift group rounded-xl border border-[var(--lime)] bg-[var(--surface)] p-6 h-full">
                       <div className="flex items-center justify-between gap-3">
-                        <span className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: `${c.color}1f`, color: c.color }}>
+                        <span className="w-12 h-12 rounded-xl flex items-center justify-center bg-[rgba(201,241,88,0.15)] text-[var(--lime)]">
                           <Icon name="award" className="w-6 h-6" />
                         </span>
                         <span className="chip !text-[var(--lime)] !border-[rgba(201,241,88,0.4)]">TASDIQLANGAN</span>
                       </div>
-                      <h3 className="font-d font-bold text-[0.92rem] mt-4">{c.title}</h3>
-                      <p className="font-mono text-[0.7rem] text-[var(--mut)] mt-1.5">{when} · {c.hours} soat</p>
+                      <h3 className="font-d font-bold text-[0.92rem] mt-4">{cert.courseTitle}</h3>
+                      <p className="font-mono text-[0.7rem] text-[var(--mut)] mt-1.5">{when} · Natija: {cert.score}%</p>
+                      <p className="font-mono text-[0.6rem] text-[var(--dim)] mt-1">ID: {cert.certificateId}</p>
                       <button
-                        onClick={() => { downloadCert(c.title, user.name, when); showToast("📥 Sertifikat PNG ko'rinishida yuklab olindi!"); }}
+                        onClick={() => { downloadCert(cert.courseTitle, cert.userName, when); showToast("📥 Sertifikat PNG ko'rinishida yuklab olindi!"); }}
                         className="btn-lime w-full justify-center !py-3 mt-5"
                       >
                         <Icon name="download" className="w-4 h-4" /> PNG YUKLAB OLISH

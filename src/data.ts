@@ -5,6 +5,20 @@ export interface Lesson {
   type: "Video" | "Amaliyot" | "Jonli" | "Test";
   section?: string; // modul nomi
   video?: string; // YouTube yoki .mp4 havola (bo'sh qoldirilgan — o'qituvchi qo'shadi)
+  quiz?: QuizQuestion[]; // dars uchun test savollari
+}
+
+export interface QuizQuestion {
+  id: string;
+  question: string;
+  options: string[];
+  correctAnswer: number; // to'g'ri javob indeksi
+}
+
+export interface FinalExam {
+  courseId: string;
+  questions: QuizQuestion[];
+  passingScore: number; // o'tish uchun kerakli foiz (0-100)
 }
 
 export interface Course {
@@ -21,6 +35,7 @@ export interface Course {
   mentor: { name: string; role: string; exp: string };
   outcomes: string[];
   lessons: Lesson[];
+  finalExam?: FinalExam;
 }
 
 export const COURSES: Course[] = [

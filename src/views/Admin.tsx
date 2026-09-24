@@ -72,25 +72,55 @@ const deleteVideoFromDB = async (db: IDBDatabase, id: string): Promise<void> => 
 
 /* ---------- Haqiqiy AI API'ga ulanish ---------- */
 const callRealAI = async (message: string, apiKey: string, provider: "gemini" | "qwen"): Promise<string> => {
+  if (!apiKey || apiKey.trim() === "") {
+    return "❌ API kalit kiritilmagan. Admin panelda AI sozlamalarini tekshiring.";
+  }
+
   try {
     if (provider === "gemini") {
-      // Google Gemini API
+      // Google Gemini API - yangi model
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            "x-goog-api-key": apiKey
+          },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: message }] }],
+            contents: [{ 
+              parts: [{ text: message }],
+              role: "user"
+            }],
+            generationConfig: {
+              temperature: 0.7,
+              topK: 40,
+              topP: 0.95,
+              maxOutputTokens: 2048,
+            }
           }),
         }
       );
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("Gemini API xatosi:", errorData);
+        return `❌ Gemini API xatosi: ${errorData.error?.message || response.statusText}`;
+      }
+      
       const data = await response.json();
-      return data.candidates?.[0]?.content?.parts?.[0]?.text || "Javob olishda xatolik yuz berdi";
+      console.log("Gemini javobi:", data);
+      
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) {
+        return "❌ Gemini javob bermadi. API kalitni tekshiring.";
+      }
+      return text;
+      
     } else if (provider === "qwen") {
-      // Alibaba Qwen API (DashScope)
+      // Alibaba Qwen API - OpenAI formatida
       const response = await fetch(
-        "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation",
+        "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
         {
           method: "POST",
           headers: {
@@ -99,20 +129,49 @@ const callRealAI = async (message: string, apiKey: string, provider: "gemini" | 
           },
           body: JSON.stringify({
             model: "qwen-turbo",
-            input: {
-              messages: [{ role: "user", content: message }],
-            },
+            messages: [
+              { 
+                role: "system", 
+                content: "Siz Razzoq Academy'ning yordamchi AI'siz. O'zbek, ingliz va rus tillarida javob bering."
+              },
+              { 
+                role: "user", 
+                content: message 
+              }
+            ],
+            temperature: 0.7,
+            max_tokens: 2048
           }),
         }
       );
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("Qwen API xatosi:", errorData);
+        return `❌ Qwen API xatosi: ${errorData.error?.message || response.statusText}`;
+      }
+      
       const data = await response.json();
-      return data.output?.text || "Javob olishda xatolik yuz berdi";
+      console.log("Qwen javobi:", data);
+      
+      const text = data.choices?.[0]?.message?.content;
+      if (!text) {
+        return "❌ Qwen javob bermadi. API kalitni tekshiring.";
+      }
+      return text;
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("AI API xatosi:", error);
-    return "AI xizmatiga ulanishda xatolik yuz berdi";
+    
+    // CORS xatosi bo'lsa
+    if (error.message?.includes("Failed to fetch") || error.message?.includes("CORS")) {
+      return "❌ CORS xatosi: Brauzer API'ga ulana olmayapti. Server tomonidan ruxsat berilmagan bo'lishi mumkin. Mahalliy rejimda ishlashni davom eting.";
+    }
+    
+    return `❌ AI xizmatiga ulanishda xatolik: ${error.message || "Noma'lum xato"}`;
   }
-  return "";
+  
+  return "❌ Noma'lum provayder. Gemini yoki Qwen tanlang.";
 };
 
 const fmtDate = (iso?: string) =>
@@ -123,7 +182,7 @@ const fmtTime = (iso?: string) =>
 type Tab = "umumiy" | "users" | "kurslar" | "darslar" | "ai" | "ai-settings" | "db";
 
 export default function Admin() {
-  const { user, users, navigate, deleteUser, setUserRole, showToast, videoLinks, setVideoLink, removeVideoLink, customCourses, addCustomCourse, removeCustomCourse, updateCustomCourse, addLessonToCourse, removeLessonFromCourse, updateLessonInCourse, aiConfig, setAiConfig } = useApp();
+  const { user, users, navigate, deleteUser, setUserRole, showToast, videoLinks, setVideoLink, removeVideoLink, customCourses, addCustomCourse, removeCustomCourse, updateCustomCourse, addLessonToCourse, removeLessonFromCourse, updateLessonInCourse, aiConfig, setAiConfig, mentorMaps, updateMentor, quizMap, setQuizForLesson, removeQuizFromLesson, finalExamMap, setFinalExamForCourse, removeFinalExamFromCourse } = useApp();
   const [tab, setTab] = useState<Tab>("umumiy");
   const [q, setQ] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -139,6 +198,9 @@ export default function Admin() {
   const [newCourseDesc, setNewCourseDesc] = useState("");
   const [newCourseColor, setNewCourseColor] = useState("#C9F158");
   const [newCourseDuration, setNewCourseDuration] = useState(0);
+  const [newMentorName, setNewMentorName] = useState("");
+  const [newMentorRole, setNewMentorRole] = useState("");
+  const [newMentorExp, setNewMentorExp] = useState("");
   
   // Yangi dars qo'shish state
   const [showNewLesson, setShowNewLesson] = useState(false);
@@ -152,12 +214,22 @@ export default function Admin() {
   const [editCourseDesc, setEditCourseDesc] = useState("");
   const [editCourseColor, setEditCourseColor] = useState("#C9F158");
   const [editCourseDuration, setEditCourseDuration] = useState(0);
+  const [editMentorName, setEditMentorName] = useState("");
+  const [editMentorRole, setEditMentorRole] = useState("");
+  const [editMentorExp, setEditMentorExp] = useState("");
   
   const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
   const [editLessonTitle, setEditLessonTitle] = useState("");
   const [editLessonDur, setEditLessonDur] = useState(30);
   const [editLessonType, setEditLessonType] = useState<"Video" | "Amaliyot" | "Jonli" | "Test">("Video");
   const [showVideoForm, setShowVideoForm] = useState<string | null>(null);
+  
+  // Test qo'shish state
+  const [showQuizForm, setShowQuizForm] = useState<string | null>(null);
+  const [quizQuestions, setQuizQuestions] = useState<Array<{question: string, options: string[], correctAnswer: number}>>([]);
+  const [showFinalExamForm, setShowFinalExamForm] = useState(false);
+  const [finalExamQuestions, setFinalExamQuestions] = useState<Array<{question: string, options: string[], correctAnswer: number}>>([]);
+  const [finalExamPassingScore, setFinalExamPassingScore] = useState(70);
 
   useEffect(() => {
     if (!user) navigate("/auth");
@@ -471,12 +543,40 @@ export default function Admin() {
             {/* Asosiy kurslar */}
             <p className="font-mono text-[0.66rem] uppercase tracking-widest text-[var(--mut)] mb-4">Asosiy kurslar (o'chirib bo'lmaydi)</p>
             <div className="grid md:grid-cols-2 gap-4 mb-8">
-              {courseStats.map((s, i) => (
+              {courseStats.map((s, i) => {
+                const currentMentor = mentorMaps[s.c.id] || s.c.mentor;
+                return (
                 <Reveal key={s.c.id} delay={Math.min(i * 70, 300)}>
                   <div className="lift rounded-xl border border-[var(--line)] bg-[var(--surface)] p-6 h-full" style={{ ["--hover-c" as any]: s.c.color }}>
                     <div className="flex items-center justify-between gap-3">
                       <h3 className="font-d font-bold text-[0.95rem]">{s.c.title}</h3>
-                      <span className="chip" style={{ color: s.c.color, borderColor: `${s.c.color}55` }}>{s.c.lessons.length} dars</span>
+                      <div className="flex items-center gap-2">
+                        <span className="chip" style={{ color: s.c.color, borderColor: `${s.c.color}55` }}>{s.c.lessons.length} dars</span>
+                        <button 
+                          onClick={() => {
+                            setEditingCourseId(s.c.id);
+                            setEditCourseTitle(s.c.title);
+                            setEditCourseDesc(s.c.desc);
+                            setEditCourseColor(s.c.color);
+                            setEditCourseDuration(s.c.hours * 60);
+                            setEditMentorName(currentMentor.name);
+                            setEditMentorRole(currentMentor.role);
+                            setEditMentorExp(currentMentor.exp);
+                          }}
+                          className="w-7 h-7 rounded-md border border-[var(--sky)] flex items-center justify-center text-[var(--sky)] hover:bg-[var(--sky)] hover:text-[var(--ink)] transition-colors cursor-pointer" 
+                          title="Ustozni tahrirlash"
+                        >
+                          <Icon name="edit" className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {/* Mentor ma'lumotlari */}
+                    <div className="mt-3 p-3 rounded-lg bg-[var(--ink2)] border border-[var(--line-soft)]">
+                      <p className="font-mono text-[0.6rem] uppercase tracking-widest text-[var(--amber)] mb-2">👨‍🏫 Ustoz</p>
+                      <p className="text-[0.82rem] font-semibold">{currentMentor.name}</p>
+                      <p className="text-[0.7rem] text-[var(--mut)]">{currentMentor.role}</p>
+                      {currentMentor.exp && <p className="text-[0.66rem] font-mono mt-1" style={{ color: s.c.color }}>{currentMentor.exp}</p>}
                     </div>
                     <div className="mt-4 grid grid-cols-3 gap-3 text-center">
                       <div className="rounded-lg bg-[var(--ink2)] border border-[var(--line-soft)] py-3">
@@ -497,7 +597,8 @@ export default function Admin() {
                     </div>
                   </div>
                 </Reveal>
-              ))}
+                );
+              })}
             </div>
             
             {/* Admin qo'shgan kurslar */}
@@ -518,6 +619,9 @@ export default function Admin() {
                               setEditCourseDesc(c.desc);
                               setEditCourseColor(c.color);
                               setEditCourseDuration(c.duration || 0);
+                              setEditMentorName(c.mentor?.name || "");
+                              setEditMentorRole(c.mentor?.role || "");
+                              setEditMentorExp(c.mentor?.exp || "");
                             }} className="w-7 h-7 rounded-md border border-[var(--sky)] flex items-center justify-center text-[var(--sky)] hover:bg-[var(--sky)] hover:text-[var(--ink)] transition-colors cursor-pointer" title="Tahrirlash">
                               <Icon name="edit" className="w-3.5 h-3.5" />
                             </button>
@@ -563,13 +667,52 @@ export default function Admin() {
                     <label className="block font-mono text-[0.66rem] uppercase tracking-widest text-[var(--mut)] mb-2">Umumiy davomiylik (daqiqa)</label>
                     <input type="number" value={newCourseDuration} onChange={(e) => setNewCourseDuration(Number(e.target.value))} placeholder="Masalan: 120" className="field !py-2.5 !text-[0.85rem]" />
                   </div>
+                  
+                  {/* Mentor ma'lumotlari */}
+                  <div className="border-t border-[var(--line-soft)] pt-4 mt-4">
+                    <p className="font-mono text-[0.66rem] uppercase tracking-widest text-[var(--amber)] mb-3">👨‍🏫 Ustoz (Mentor) ma'lumotlari</p>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block font-mono text-[0.62rem] text-[var(--mut)] mb-1">Ismi</label>
+                        <input value={newMentorName} onChange={(e) => setNewMentorName(e.target.value)} placeholder="Masalan: Abdurazzoq Olimjonov" className="field !py-2 !text-[0.82rem]" />
+                      </div>
+                      <div>
+                        <label className="block font-mono text-[0.62rem] text-[var(--mut)] mb-1">Lavozimi</label>
+                        <input value={newMentorRole} onChange={(e) => setNewMentorRole(e.target.value)} placeholder="Masalan: Front-End o'qituvchisi" className="field !py-2 !text-[0.82rem]" />
+                      </div>
+                      <div>
+                        <label className="block font-mono text-[0.62rem] text-[var(--mut)] mb-1">Tajribasi</label>
+                        <input value={newMentorExp} onChange={(e) => setNewMentorExp(e.target.value)} placeholder="Masalan: 2 yillik tajriba" className="field !py-2 !text-[0.82rem]" />
+                      </div>
+                    </div>
+                  </div>
+                  
                   <div className="flex gap-3">
                     <button onClick={() => {
                       if (!newCourseTitle.trim()) { showToast("Kurs nomini kiriting"); return; }
                       const id = `custom_${Date.now()}`;
-                      addCustomCourse({ id, title: newCourseTitle.trim(), desc: newCourseDesc.trim(), color: newCourseColor, lessons: [], createdAt: new Date().toISOString(), duration: newCourseDuration });
-                      setNewCourseTitle(""); setNewCourseDesc(""); setNewCourseDuration(0); setShowNewCourse(false);
-                      showToast("✅ Yangi kurs qo'shildi!");
+                      addCustomCourse({ 
+                        id, 
+                        title: newCourseTitle.trim(), 
+                        desc: newCourseDesc.trim(), 
+                        color: newCourseColor, 
+                        lessons: [], 
+                        createdAt: new Date().toISOString(), 
+                        duration: newCourseDuration,
+                        mentor: {
+                          name: newMentorName.trim(),
+                          role: newMentorRole.trim(),
+                          exp: newMentorExp.trim()
+                        }
+                      });
+                      setNewCourseTitle(""); 
+                      setNewCourseDesc(""); 
+                      setNewCourseDuration(0);
+                      setNewMentorName("");
+                      setNewMentorRole("");
+                      setNewMentorExp("");
+                      setShowNewCourse(false);
+                      showToast("✅ Yangi kurs va ustoz ma'lumotlari qo'shildi!");
                     }} className="btn-lime !py-2.5 !px-5 !text-[0.68rem]">SAQLASH</button>
                     <button onClick={() => setShowNewCourse(false)} className="btn-ghost !py-2.5 !px-5 !text-[0.68rem]">BEKOR</button>
                   </div>
@@ -604,12 +747,58 @@ export default function Admin() {
                     <label className="block font-mono text-[0.66rem] uppercase tracking-widest text-[var(--mut)] mb-2">Umumiy davomiylik (daqiqa)</label>
                     <input type="number" value={editCourseDuration} onChange={(e) => setEditCourseDuration(Number(e.target.value))} placeholder="Masalan: 120" className="field !py-2.5 !text-[0.85rem]" />
                   </div>
+                  
+                  {/* Mentor ma'lumotlari */}
+                  <div className="border-t border-[var(--line-soft)] pt-4 mt-4">
+                    <p className="font-mono text-[0.66rem] uppercase tracking-widest text-[var(--amber)] mb-3">👨‍🏫 Ustoz (Mentor) ma'lumotlari</p>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block font-mono text-[0.62rem] text-[var(--mut)] mb-1">Ismi</label>
+                        <input value={editMentorName} onChange={(e) => setEditMentorName(e.target.value)} placeholder="Masalan: Abdurazzoq Olimjonov" className="field !py-2 !text-[0.82rem]" />
+                      </div>
+                      <div>
+                        <label className="block font-mono text-[0.62rem] text-[var(--mut)] mb-1">Lavozimi</label>
+                        <input value={editMentorRole} onChange={(e) => setEditMentorRole(e.target.value)} placeholder="Masalan: Front-End o'qituvchisi" className="field !py-2 !text-[0.82rem]" />
+                      </div>
+                      <div>
+                        <label className="block font-mono text-[0.62rem] text-[var(--mut)] mb-1">Tajribasi</label>
+                        <input value={editMentorExp} onChange={(e) => setEditMentorExp(e.target.value)} placeholder="Masalan: 2 yillik tajriba" className="field !py-2 !text-[0.82rem]" />
+                      </div>
+                    </div>
+                  </div>
+                  
                   <div className="flex gap-3">
                     <button onClick={() => {
                       if (!editCourseTitle.trim()) { showToast("Kurs nomini kiriting"); return; }
-                      updateCustomCourse(editingCourseId, { title: editCourseTitle.trim(), desc: editCourseDesc.trim(), color: editCourseColor, duration: editCourseDuration });
+                      
+                      // Asosiy kursmi yoki custom kursmi?
+                      const isBaseCourse = COURSES.find(c => c.id === editingCourseId);
+                      
+                      if (isBaseCourse) {
+                        // Asosiy kurs uchun faqat mentor ma'lumotlarini yangilash
+                        updateMentor(editingCourseId, {
+                          name: editMentorName.trim(),
+                          role: editMentorRole.trim(),
+                          exp: editMentorExp.trim()
+                        });
+                        showToast("✅ Ustoz ma'lumotlari yangilandi!");
+                      } else {
+                        // Custom kurs uchun hammasini yangilash
+                        updateCustomCourse(editingCourseId, { 
+                          title: editCourseTitle.trim(), 
+                          desc: editCourseDesc.trim(), 
+                          color: editCourseColor, 
+                          duration: editCourseDuration,
+                          mentor: {
+                            name: editMentorName.trim(),
+                            role: editMentorRole.trim(),
+                            exp: editMentorExp.trim()
+                          }
+                        });
+                        showToast("✅ Kurs va ustoz ma'lumotlari yangilandi!");
+                      }
+                      
                       setEditingCourseId(null);
-                      showToast("✅ Kurs yangilandi!");
                     }} className="btn-lime !py-2.5 !px-5 !text-[0.68rem]">SAQLASH</button>
                     <button onClick={() => setEditingCourseId(null)} className="btn-ghost !py-2.5 !px-5 !text-[0.68rem]">BEKOR</button>
                   </div>
@@ -666,6 +855,24 @@ export default function Admin() {
                             setEditLessonType(l.type);
                           }} className="w-7 h-7 rounded-md border border-[var(--sky)] flex items-center justify-center text-[var(--sky)] hover:bg-[var(--sky)] hover:text-[var(--ink)] transition-colors cursor-pointer" title="Tahrirlash">
                             <Icon name="edit" className="w-3.5 h-3.5" />
+                          </button>
+                          {/* Test qo'shish tugmasi */}
+                          <button 
+                            onClick={() => {
+                              const existingQuiz = quizMap[l.id] || [];
+                              setQuizQuestions(existingQuiz.map(q => ({
+                                question: q.question,
+                                options: q.options,
+                                correctAnswer: q.correctAnswer
+                              })));
+                              setShowQuizForm(showQuizForm === l.id ? null : l.id);
+                            }}
+                            className={`w-7 h-7 rounded-md border flex items-center justify-center transition-colors cursor-pointer ${
+                              quizMap[l.id] ? "border-[var(--amber)] bg-[rgba(255,154,60,0.1)] text-[var(--amber)]" : "border-[var(--line)] text-[var(--mut)] hover:border-[var(--amber)] hover:text-[var(--amber)]"
+                            }`} 
+                            title="Test qo'shish/tahrirlash"
+                          >
+                            <Icon name="target" className="w-3.5 h-3.5" />
                           </button>
                           {customCourses[selectedCourseId] && (
                             <button onClick={() => { if (confirm(`"${l.title}" darsini o'chirishni xohlaysizmi?`)) { removeLessonFromCourse(selectedCourseId, l.id); showToast("Dars o'chirildi"); } }} className="w-7 h-7 rounded-md border border-[var(--coral)] flex items-center justify-center text-[var(--coral)] hover:bg-[var(--coral)] hover:text-[var(--ink)] transition-colors cursor-pointer" title="O'chirish">
@@ -861,12 +1068,316 @@ export default function Admin() {
                             {videoError && <p className="mt-2 text-[0.72rem] text-[var(--coral)]">{videoError}</p>}
                           </div>
                         )}
+                        
+                        {/* Test qo'shish formasi */}
+                        {showQuizForm === l.id && (
+                          <div className="w-full mt-3 pt-3 border-t border-[var(--line-soft)]">
+                            <p className="font-mono text-[0.62rem] uppercase tracking-widest text-[var(--amber)] mb-3">🎯 Test savollari qo'shish</p>
+                            
+                            <div className="space-y-4">
+                              {quizQuestions.map((q, qIdx) => (
+                                <div key={qIdx} className="rounded-lg border border-[var(--line)] bg-[var(--ink2)] p-4">
+                                  <div className="flex items-center justify-between mb-3">
+                                    <span className="font-mono text-[0.66rem] text-[var(--amber)] font-bold">Savol {qIdx + 1}</span>
+                                    <button 
+                                      onClick={() => {
+                                        const newQuestions = [...quizQuestions];
+                                        newQuestions.splice(qIdx, 1);
+                                        setQuizQuestions(newQuestions);
+                                      }}
+                                      className="text-[var(--coral)] hover:text-[var(--coral)] text-[0.66rem] cursor-pointer"
+                                    >
+                                      <Icon name="x" className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                  
+                                  <input 
+                                    value={q.question}
+                                    onChange={(e) => {
+                                      const newQuestions = [...quizQuestions];
+                                      newQuestions[qIdx].question = e.target.value;
+                                      setQuizQuestions(newQuestions);
+                                    }}
+                                    placeholder="Savol matni..."
+                                    className="field !py-2 !text-[0.82rem] mb-3"
+                                  />
+                                  
+                                  <div className="space-y-2">
+                                    {q.options.map((opt, oIdx) => (
+                                      <div key={oIdx} className="flex items-center gap-2">
+                                        <input 
+                                          type="radio"
+                                          name={`correct-${qIdx}`}
+                                          checked={q.correctAnswer === oIdx}
+                                          onChange={() => {
+                                            const newQuestions = [...quizQuestions];
+                                            newQuestions[qIdx].correctAnswer = oIdx;
+                                            setQuizQuestions(newQuestions);
+                                          }}
+                                          className="w-4 h-4"
+                                        />
+                                        <input 
+                                          value={opt}
+                                          onChange={(e) => {
+                                            const newQuestions = [...quizQuestions];
+                                            newQuestions[qIdx].options[oIdx] = e.target.value;
+                                            setQuizQuestions(newQuestions);
+                                          }}
+                                          placeholder={`Javob ${String.fromCharCode(65 + oIdx)}`}
+                                          className="field !py-1.5 !text-[0.78rem] flex-1"
+                                        />
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                              
+                              <button 
+                                onClick={() => {
+                                  setQuizQuestions([...quizQuestions, {
+                                    question: "",
+                                    options: ["", "", "", ""],
+                                    correctAnswer: 0
+                                  }]);
+                                }}
+                                className="w-full py-3 rounded-lg border border-dashed border-[var(--amber)] text-[var(--amber)] hover:bg-[rgba(255,154,60,0.08)] transition-colors cursor-pointer text-[0.78rem] font-semibold"
+                              >
+                                + YANGI SAVOL QO'SHISH
+                              </button>
+                              
+                              <div className="flex gap-3">
+                                <button 
+                                  onClick={() => {
+                                    if (quizQuestions.length === 0) {
+                                      showToast("Kamida 1 ta savol qo'shing");
+                                      return;
+                                    }
+                                    const questions = quizQuestions.map((q, idx) => ({
+                                      id: `${l.id}-q${idx + 1}`,
+                                      question: q.question,
+                                      options: q.options,
+                                      correctAnswer: q.correctAnswer
+                                    }));
+                                    setQuizForLesson(l.id, questions);
+                                    setShowQuizForm(null);
+                                    setQuizQuestions([]);
+                                    showToast(`✅ ${questions.length} ta test savoli qo'shildi!`);
+                                  }}
+                                  className="btn-lime !py-2.5 !px-5 !text-[0.66rem]"
+                                >
+                                  SAQLASH
+                                </button>
+                                <button 
+                                  onClick={() => {
+                                    setShowQuizForm(null);
+                                    setQuizQuestions([]);
+                                  }}
+                                  className="btn-ghost !py-2.5 !px-5 !text-[0.66rem]"
+                                >
+                                  BEKOR
+                                </button>
+                                {quizMap[l.id] && (
+                                  <button 
+                                    onClick={() => {
+                                      if (confirm("Test savollarini o'chirishni xohlaysizmi?")) {
+                                        removeQuizFromLesson(l.id);
+                                        setShowQuizForm(null);
+                                        setQuizQuestions([]);
+                                        showToast("Test savollari o'chirildi");
+                                      }
+                                    }}
+                                    className="btn-ghost !py-2.5 !px-5 !text-[0.66rem] !text-[var(--coral)] !border-[rgba(255,107,94,0.4)]"
+                                  >
+                                    O'CHIRISH
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
                 </div>
               );
             })()}
+            
+            {/* Yakuniy imtihon qo'shish */}
+            <div className="mt-8 pt-6 border-t border-[var(--line)]">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-d font-bold text-[1.1rem]">🏆 Yakuniy Imtihon</h3>
+                <button 
+                  onClick={() => {
+                    const existingExam = finalExamMap[selectedCourseId];
+                    if (existingExam) {
+                      setFinalExamQuestions(existingExam.questions.map(q => ({
+                        question: q.question,
+                        options: q.options,
+                        correctAnswer: q.correctAnswer
+                      })));
+                      setFinalExamPassingScore(existingExam.passingScore);
+                    } else {
+                      setFinalExamQuestions([]);
+                      setFinalExamPassingScore(70);
+                    }
+                    setShowFinalExamForm(!showFinalExamForm);
+                  }}
+                  className="btn-ghost !py-2 !px-4 !text-[0.66rem]"
+                >
+                  {finalExamMap[selectedCourseId] ? "TAHRIRLASH" : "QO'SHISH"}
+                </button>
+              </div>
+              
+              {finalExamMap[selectedCourseId] && !showFinalExamForm && (
+                <div className="rounded-lg border border-[var(--lime)] bg-[rgba(201,241,88,0.05)] p-4">
+                  <p className="text-[0.78rem] text-[var(--bone)] font-semibold">
+                    ✅ Yakuniy imtihon qo'shilgan: {finalExamMap[selectedCourseId].questions.length} ta savol, o'tish bali: {finalExamMap[selectedCourseId].passingScore}%
+                  </p>
+                </div>
+              )}
+              
+              {showFinalExamForm && (
+                <div className="rounded-xl border border-[var(--amber)] bg-[rgba(255,154,60,0.05)] p-6">
+                  <p className="font-d font-bold text-[0.95rem] mb-4">Yakuniy imtihon savollari</p>
+                  
+                  <div className="mb-4">
+                    <label className="block font-mono text-[0.66rem] uppercase tracking-widest text-[var(--mut)] mb-2">O'tish bali (%)</label>
+                    <input 
+                      type="number" 
+                      min="0" 
+                      max="100"
+                      value={finalExamPassingScore}
+                      onChange={(e) => setFinalExamPassingScore(Number(e.target.value))}
+                      className="field !py-2 !text-[0.82rem] !w-32"
+                    />
+                  </div>
+                  
+                  <div className="space-y-4 mb-6">
+                    {finalExamQuestions.map((q, qIdx) => (
+                      <div key={qIdx} className="rounded-lg border border-[var(--line)] bg-[var(--ink2)] p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="font-mono text-[0.66rem] text-[var(--amber)] font-bold">Savol {qIdx + 1}</span>
+                          <button 
+                            onClick={() => {
+                              const newQuestions = [...finalExamQuestions];
+                              newQuestions.splice(qIdx, 1);
+                              setFinalExamQuestions(newQuestions);
+                            }}
+                            className="text-[var(--coral)] hover:text-[var(--coral)] text-[0.66rem] cursor-pointer"
+                          >
+                            <Icon name="x" className="w-4 h-4" />
+                          </button>
+                        </div>
+                        
+                        <input 
+                          value={q.question}
+                          onChange={(e) => {
+                            const newQuestions = [...finalExamQuestions];
+                            newQuestions[qIdx].question = e.target.value;
+                            setFinalExamQuestions(newQuestions);
+                          }}
+                          placeholder="Savol matni..."
+                          className="field !py-2 !text-[0.82rem] mb-3"
+                        />
+                        
+                        <div className="space-y-2">
+                          {q.options.map((opt, oIdx) => (
+                            <div key={oIdx} className="flex items-center gap-2">
+                              <input 
+                                type="radio"
+                                name={`final-correct-${qIdx}`}
+                                checked={q.correctAnswer === oIdx}
+                                onChange={() => {
+                                  const newQuestions = [...finalExamQuestions];
+                                  newQuestions[qIdx].correctAnswer = oIdx;
+                                  setFinalExamQuestions(newQuestions);
+                                }}
+                                className="w-4 h-4"
+                              />
+                              <input 
+                                value={opt}
+                                onChange={(e) => {
+                                  const newQuestions = [...finalExamQuestions];
+                                  newQuestions[qIdx].options[oIdx] = e.target.value;
+                                  setFinalExamQuestions(newQuestions);
+                                }}
+                                placeholder={`Javob ${String.fromCharCode(65 + oIdx)}`}
+                                className="field !py-1.5 !text-[0.78rem] flex-1"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                    
+                    <button 
+                      onClick={() => {
+                        setFinalExamQuestions([...finalExamQuestions, {
+                          question: "",
+                          options: ["", "", "", ""],
+                          correctAnswer: 0
+                        }]);
+                      }}
+                      className="w-full py-3 rounded-lg border border-dashed border-[var(--amber)] text-[var(--amber)] hover:bg-[rgba(255,154,60,0.08)] transition-colors cursor-pointer text-[0.78rem] font-semibold"
+                    >
+                      + YANGI SAVOL QO'SHISH
+                    </button>
+                  </div>
+                  
+                  <div className="flex gap-3">
+                    <button 
+                      onClick={() => {
+                        if (finalExamQuestions.length === 0) {
+                          showToast("Kamida 1 ta savol qo'shing");
+                          return;
+                        }
+                        const questions = finalExamQuestions.map((q, idx) => ({
+                          id: `final-q${idx + 1}`,
+                          question: q.question,
+                          options: q.options,
+                          correctAnswer: q.correctAnswer
+                        }));
+                        setFinalExamForCourse(selectedCourseId, {
+                          courseId: selectedCourseId,
+                          questions,
+                          passingScore: finalExamPassingScore
+                        });
+                        setShowFinalExamForm(false);
+                        setFinalExamQuestions([]);
+                        showToast(`✅ Yakuniy imtihon saqlandi! ${questions.length} ta savol`);
+                      }}
+                      className="btn-lime !py-2.5 !px-5 !text-[0.66rem]"
+                    >
+                      SAQLASH
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setShowFinalExamForm(false);
+                        setFinalExamQuestions([]);
+                      }}
+                      className="btn-ghost !py-2.5 !px-5 !text-[0.66rem]"
+                    >
+                      BEKOR
+                    </button>
+                    {finalExamMap[selectedCourseId] && (
+                      <button 
+                        onClick={() => {
+                          if (confirm("Yakuniy imtihonni o'chirishni xohlaysizmi?")) {
+                            removeFinalExamFromCourse(selectedCourseId);
+                            setShowFinalExamForm(false);
+                            setFinalExamQuestions([]);
+                            showToast("Yakuniy imtihon o'chirildi");
+                          }
+                        }}
+                        className="btn-ghost !py-2.5 !px-5 !text-[0.66rem] !text-[var(--coral)] !border-[rgba(255,107,94,0.4)]"
+                      >
+                        O'CHIRISH
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
             
             {/* Yangi dars formasi */}
             {showNewLesson && (
@@ -1089,14 +1600,25 @@ export default function Admin() {
                   {aiConfig.provider !== "local" && aiConfig.apiKey && (
                     <button
                       onClick={async () => {
-                        showToast("AI bilan test qilinmoqda...");
+                        showToast("🔄 AI bilan test qilinmoqda...");
                         try {
-                          const testMsg = "Salom! Bu test xabari.";
+                          const testMsg = "Salom! Bu test xabari. Qisqa javob bering.";
                           const response = await callRealAI(testMsg, aiConfig.apiKey, aiConfig.provider as "gemini" | "qwen");
-                          showToast(`✅ ${aiConfig.provider.toUpperCase()} muvaffaqiyatli ulandi!`);
-                          console.log("AI javobi:", response);
-                        } catch (error) {
-                          showToast(`❌ ${aiConfig.provider.toUpperCase()} ga ulanishda xatolik`);
+                          
+                          if (response.startsWith("❌")) {
+                            showToast(response);
+                            console.error("Test xatosi:", response);
+                          } else {
+                            showToast(`✅ ${aiConfig.provider.toUpperCase()} muvaffaqiyatli ishladi!`);
+                            console.log("✅ AI javobi:", response);
+                            // Javobni ko'rsatish
+                            alert(`🎉 Test muvaffaqiyatli!\n\nAI javobi:\n${response.substring(0, 200)}${response.length > 200 ? "..." : ""}`);
+                          }
+                        } catch (error: any) {
+                          const errorMsg = `❌ ${aiConfig.provider.toUpperCase()} ga ulanishda xatolik: ${error.message}`;
+                          showToast(errorMsg);
+                          console.error("Test xatosi:", error);
+                          alert(errorMsg);
                         }
                       }}
                       className="btn-lime !py-3"

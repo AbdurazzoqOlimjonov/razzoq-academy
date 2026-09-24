@@ -87,25 +87,55 @@ const speak = (text: string, enabled: boolean, lang: "uz" | "en" | "ru" = "uz") 
 
 /* ---------- Haqiqiy AI API'ga ulanish ---------- */
 const callRealAI = async (message: string, apiKey: string, provider: "gemini" | "qwen"): Promise<string> => {
+  if (!apiKey || apiKey.trim() === "") {
+    return "❌ API kalit kiritilmagan. Admin panelda AI sozlamalarini tekshiring.";
+  }
+
   try {
     if (provider === "gemini") {
-      // Google Gemini API
+      // Google Gemini API - yangi model
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            "x-goog-api-key": apiKey
+          },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: message }] }],
+            contents: [{ 
+              parts: [{ text: message }],
+              role: "user"
+            }],
+            generationConfig: {
+              temperature: 0.7,
+              topK: 40,
+              topP: 0.95,
+              maxOutputTokens: 2048,
+            }
           }),
         }
       );
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("Gemini API xatosi:", errorData);
+        return `❌ Gemini API xatosi: ${errorData.error?.message || response.statusText}`;
+      }
+      
       const data = await response.json();
-      return data.candidates?.[0]?.content?.parts?.[0]?.text || "Javob olishda xatolik yuz berdi";
+      console.log("Gemini javobi:", data);
+      
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) {
+        return "❌ Gemini javob bermadi. API kalitni tekshiring.";
+      }
+      return text;
+      
     } else if (provider === "qwen") {
-      // Alibaba Qwen API (DashScope)
+      // Alibaba Qwen API - OpenAI formatida
       const response = await fetch(
-        "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation",
+        "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
         {
           method: "POST",
           headers: {
@@ -114,20 +144,49 @@ const callRealAI = async (message: string, apiKey: string, provider: "gemini" | 
           },
           body: JSON.stringify({
             model: "qwen-turbo",
-            input: {
-              messages: [{ role: "user", content: message }],
-            },
+            messages: [
+              { 
+                role: "system", 
+                content: "Siz Razzoq Academy'ning yordamchi AI'siz. O'zbek, ingliz va rus tillarida javob bering."
+              },
+              { 
+                role: "user", 
+                content: message 
+              }
+            ],
+            temperature: 0.7,
+            max_tokens: 2048
           }),
         }
       );
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("Qwen API xatosi:", errorData);
+        return `❌ Qwen API xatosi: ${errorData.error?.message || response.statusText}`;
+      }
+      
       const data = await response.json();
-      return data.output?.text || "Javob olishda xatolik yuz berdi";
+      console.log("Qwen javobi:", data);
+      
+      const text = data.choices?.[0]?.message?.content;
+      if (!text) {
+        return "❌ Qwen javob bermadi. API kalitni tekshiring.";
+      }
+      return text;
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("AI API xatosi:", error);
-    return "AI xizmatiga ulanishda xatolik yuz berdi";
+    
+    // CORS xatosi bo'lsa
+    if (error.message?.includes("Failed to fetch") || error.message?.includes("CORS")) {
+      return "❌ CORS xatosi: Brauzer API'ga ulana olmayapti. Server tomonidan ruxsat berilmagan bo'lishi mumkin. Mahalliy rejimda ishlashni davom eting.";
+    }
+    
+    return `❌ AI xizmatiga ulanishda xatolik: ${error.message || "Noma'lum xato"}`;
   }
-  return "";
+  
+  return "❌ Noma'lum provayder. Gemini yoki Qwen tanlang.";
 };
 
 /* ================= ASSISTANT SAHIFASI ================= */
@@ -163,16 +222,27 @@ export default function Assistant() {
       try {
         const answer = await callRealAI(msg, aiConfig.apiKey, aiConfig.provider);
         const lang = detectLanguage(msg);
-        pushChat({ role: "ai", text: answer, t: Date.now() });
+        
+        // Agar xato bo'lsa, mahalliy rejimga o'tish
+        if (answer.startsWith("❌")) {
+          console.warn("AI API xatosi, mahalliy rejimga o'tilmoqda:", answer);
+          const fallbackAnswer = think(msg);
+          pushChat({ role: "ai", text: `${answer}\n\n---\n🔄 Mahalliy rejimga o'tildi:\n\n${fallbackAnswer}`, t: Date.now() });
+        } else {
+          pushChat({ role: "ai", text: answer, t: Date.now() });
+        }
+        
         setTyping(false);
         if (voiceRef.current && "speechSynthesis" in window) {
           setSpeaking(true);
-          speak(answer, true, lang);
+          speak(answer.startsWith("❌") ? think(msg) : answer, true, lang);
           const est = Math.min(14000, 1200 + answer.length * 55);
           window.setTimeout(() => setSpeaking(false), est);
         }
-      } catch (error) {
-        pushChat({ role: "ai", text: "AI xizmatiga ulanishda xatolik. Mahalliy rejimga o'tildi.", t: Date.now() });
+      } catch (error: any) {
+        console.error("AI xatosi:", error);
+        const fallbackAnswer = think(msg);
+        pushChat({ role: "ai", text: `❌ AI xizmatiga ulanishda xatolik: ${error.message}\n\n---\n🔄 Mahalliy rejimga o'tildi:\n\n${fallbackAnswer}`, t: Date.now() });
         setTyping(false);
       }
     } else {

@@ -295,6 +295,286 @@ export function CourseCatalog() {
   );
 }
 
+/* ================= QUIZ MODAL ================= */
+function QuizModal({
+  lesson, onClose, onComplete,
+}: {
+  lesson: Lesson;
+  onClose: () => void;
+  onComplete: (score: number, passed: boolean) => void;
+}) {
+  const [currentQuestion, setCurrentQuestion] = useState(0);
+  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [answers, setAnswers] = useState<number[]>([]);
+  const [showResult, setShowResult] = useState(false);
+  const [score, setScore] = useState(0);
+
+  if (!lesson.quiz || lesson.quiz.length === 0) {
+    return (
+      <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-[rgba(6,10,7,0.95)] backdrop-blur-sm" onClick={onClose}>
+        <div className="w-full max-w-2xl rounded-xl bg-[var(--surface)] p-8 text-center">
+          <Icon name="alert" className="w-16 h-16 text-[var(--amber)] mx-auto mb-4" />
+          <p className="text-[var(--bone)] text-lg font-bold mb-2">Test mavjud emas</p>
+          <p className="text-[var(--mut)] mb-6">Bu dars uchun test savollari qo'shilmagan.</p>
+          <button onClick={onClose} className="btn-lime">YOPISH</button>
+        </div>
+      </div>
+    );
+  }
+
+  const questions = lesson.quiz;
+  const question = questions[currentQuestion];
+
+  const handleNext = () => {
+    if (selectedAnswer === null) return;
+
+    const newAnswers = [...answers, selectedAnswer];
+    setAnswers(newAnswers);
+    setSelectedAnswer(null);
+
+    if (currentQuestion < questions.length - 1) {
+      setCurrentQuestion(currentQuestion + 1);
+    } else {
+      // Test tugadi, natijani hisoblash
+      const correct = newAnswers.filter((ans, idx) => ans === questions[idx].correctAnswer).length;
+      const finalScore = Math.round((correct / questions.length) * 100);
+      const passed = finalScore >= 70; // 70% dan yuqori bo'lsa o'tgan
+      
+      setScore(finalScore);
+      setShowResult(true);
+      onComplete(finalScore, passed);
+    }
+  };
+
+  if (showResult) {
+    const passed = score >= 70;
+    return (
+      <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-[rgba(6,10,7,0.95)] backdrop-blur-sm" onClick={onClose}>
+        <div className="w-full max-w-2xl rounded-xl bg-[var(--surface)] p-8 text-center" onClick={(e) => e.stopPropagation()}>
+          {passed ? (
+            <>
+              <div className="w-20 h-20 rounded-full bg-[var(--lime)] flex items-center justify-center mx-auto mb-4">
+                <Icon name="check" className="w-12 h-12 text-[var(--ink)]" />
+              </div>
+              <p className="text-[var(--lime)] text-2xl font-bold mb-2">Tabriklaymiz! 🎉</p>
+              <p className="text-[var(--bone)] text-lg mb-4">Test muvaffaqiyatli topshirildi!</p>
+              <p className="text-[var(--mut)] mb-6">Sizning natijangiz: <span className="text-[var(--lime)] font-bold">{score}%</span></p>
+            </>
+          ) : (
+            <>
+              <div className="w-20 h-20 rounded-full bg-[var(--coral)] flex items-center justify-center mx-auto mb-4">
+                <Icon name="x" className="w-12 h-12 text-[var(--ink)]" />
+              </div>
+              <p className="text-[var(--coral)] text-2xl font-bold mb-2">Afsuski... 😔</p>
+              <p className="text-[var(--bone)] text-lg mb-4">Test topshirilmadi</p>
+              <p className="text-[var(--mut)] mb-6">Sizning natijangiz: <span className="text-[var(--coral)] font-bold">{score}%</span></p>
+              <p className="text-[var(--mut)] text-sm mb-6">O'tish uchun kamida 70% kerak. Darsni qayta ko'rib chiqing va qaytadan urinib ko'ring.</p>
+            </>
+          )}
+          <button onClick={onClose} className="btn-lime">YOPISH</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-[rgba(6,10,7,0.95)] backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-2xl rounded-xl bg-[var(--surface)] p-8" onClick={(e) => e.stopPropagation()}>
+        {/* Progress */}
+        <div className="mb-6">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-[var(--mut)] text-sm">Savol {currentQuestion + 1} / {questions.length}</span>
+            <span className="text-[var(--lime)] text-sm font-bold">{Math.round(((currentQuestion + 1) / questions.length) * 100)}%</span>
+          </div>
+          <div className="w-full h-2 bg-[var(--ink2)] rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-[var(--lime)] transition-all duration-300"
+              style={{ width: `${((currentQuestion + 1) / questions.length) * 100}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Savol */}
+        <h3 className="text-[var(--bone)] text-xl font-bold mb-6">{question.question}</h3>
+
+        {/* Javoblar */}
+        <div className="space-y-3 mb-8">
+          {question.options.map((option, idx) => (
+            <button
+              key={idx}
+              onClick={() => setSelectedAnswer(idx)}
+              className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                selectedAnswer === idx
+                  ? "border-[var(--lime)] bg-[rgba(201,241,88,0.1)] text-[var(--bone)]"
+                  : "border-[var(--line)] bg-[var(--ink2)] text-[var(--mut)] hover:border-[var(--lime)]"
+              }`}
+            >
+              <span className="font-bold mr-3">{String.fromCharCode(65 + idx)}.</span>
+              {option}
+            </button>
+          ))}
+        </div>
+
+        {/* Tugmalar */}
+        <div className="flex gap-3">
+          <button onClick={onClose} className="btn-ghost flex-1">BEKOR QILISH</button>
+          <button 
+            onClick={handleNext} 
+            disabled={selectedAnswer === null}
+            className="btn-lime flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {currentQuestion < questions.length - 1 ? "KEYINGI" : "YAKUNLASH"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ================= FINAL EXAM MODAL ================= */
+function FinalExamModal({
+  course, onClose, onComplete,
+}: {
+  course: Course;
+  onClose: () => void;
+  onComplete: (score: number, passed: boolean) => void;
+}) {
+  const [currentQuestion, setCurrentQuestion] = useState(0);
+  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [answers, setAnswers] = useState<number[]>([]);
+  const [showResult, setShowResult] = useState(false);
+  const [score, setScore] = useState(0);
+
+  if (!course.finalExam || course.finalExam.questions.length === 0) {
+    return (
+      <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-[rgba(6,10,7,0.95)] backdrop-blur-sm" onClick={onClose}>
+        <div className="w-full max-w-2xl rounded-xl bg-[var(--surface)] p-8 text-center">
+          <Icon name="alert" className="w-16 h-16 text-[var(--amber)] mx-auto mb-4" />
+          <p className="text-[var(--bone)] text-lg font-bold mb-2">Yakuniy imtihon mavjud emas</p>
+          <p className="text-[var(--mut)] mb-6">Bu kurs uchun yakuniy imtihon qo'shilmagan.</p>
+          <button onClick={onClose} className="btn-lime">YOPISH</button>
+        </div>
+      </div>
+    );
+  }
+
+  const questions = course.finalExam.questions;
+  const passingScore = course.finalExam.passingScore;
+  const question = questions[currentQuestion];
+
+  const handleNext = () => {
+    if (selectedAnswer === null) return;
+
+    const newAnswers = [...answers, selectedAnswer];
+    setAnswers(newAnswers);
+    setSelectedAnswer(null);
+
+    if (currentQuestion < questions.length - 1) {
+      setCurrentQuestion(currentQuestion + 1);
+    } else {
+      const correct = newAnswers.filter((ans, idx) => ans === questions[idx].correctAnswer).length;
+      const finalScore = Math.round((correct / questions.length) * 100);
+      const passed = finalScore >= passingScore;
+      
+      setScore(finalScore);
+      setShowResult(true);
+      onComplete(finalScore, passed);
+    }
+  };
+
+  if (showResult) {
+    const passed = score >= passingScore;
+    return (
+      <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-[rgba(6,10,7,0.95)] backdrop-blur-sm" onClick={onClose}>
+        <div className="w-full max-w-2xl rounded-xl bg-[var(--surface)] p-8 text-center" onClick={(e) => e.stopPropagation()}>
+          {passed ? (
+            <>
+              <div className="w-24 h-24 rounded-full bg-[var(--lime)] flex items-center justify-center mx-auto mb-4">
+                <Icon name="award" className="w-14 h-14 text-[var(--ink)]" />
+              </div>
+              <p className="text-[var(--lime)] text-3xl font-bold mb-2">Tabriklaymiz! 🎉</p>
+              <p className="text-[var(--bone)] text-xl mb-4">Yakuniy imtihon muvaffaqiyatli topshirildi!</p>
+              <p className="text-[var(--mut)] mb-2">Sizning natijangiz: <span className="text-[var(--lime)] font-bold text-2xl">{score}%</span></p>
+              <p className="text-[var(--mut)] mb-6">Endi sertifikatingizni olishingiz mumkin!</p>
+            </>
+          ) : (
+            <>
+              <div className="w-24 h-24 rounded-full bg-[var(--coral)] flex items-center justify-center mx-auto mb-4">
+                <Icon name="x" className="w-14 h-14 text-[var(--ink)]" />
+              </div>
+              <p className="text-[var(--coral)] text-3xl font-bold mb-2">Afsuski... 😔</p>
+              <p className="text-[var(--bone)] text-xl mb-4">Yakuniy imtihon topshirilmadi</p>
+              <p className="text-[var(--mut)] mb-2">Sizning natijangiz: <span className="text-[var(--coral)] font-bold text-2xl">{score}%</span></p>
+              <p className="text-[var(--mut)] text-sm mb-6">O'tish uchun kamida {passingScore}% kerak. Darslarni qayta ko'rib chiqing va qaytadan urinib ko'ring.</p>
+            </>
+          )}
+          <button onClick={onClose} className="btn-lime">YOPISH</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-[rgba(6,10,7,0.95)] backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-2xl rounded-xl bg-[var(--surface)] p-8" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="text-center mb-6">
+          <Icon name="award" className="w-12 h-12 text-[var(--amber)] mx-auto mb-2" />
+          <h2 className="text-[var(--bone)] text-2xl font-bold">Yakuniy Imtihon</h2>
+          <p className="text-[var(--mut)] text-sm">{course.title}</p>
+        </div>
+
+        {/* Progress */}
+        <div className="mb-6">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-[var(--mut)] text-sm">Savol {currentQuestion + 1} / {questions.length}</span>
+            <span className="text-[var(--lime)] text-sm font-bold">{Math.round(((currentQuestion + 1) / questions.length) * 100)}%</span>
+          </div>
+          <div className="w-full h-2 bg-[var(--ink2)] rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-[var(--lime)] transition-all duration-300"
+              style={{ width: `${((currentQuestion + 1) / questions.length) * 100}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Savol */}
+        <h3 className="text-[var(--bone)] text-xl font-bold mb-6">{question.question}</h3>
+
+        {/* Javoblar */}
+        <div className="space-y-3 mb-8">
+          {question.options.map((option, idx) => (
+            <button
+              key={idx}
+              onClick={() => setSelectedAnswer(idx)}
+              className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                selectedAnswer === idx
+                  ? "border-[var(--lime)] bg-[rgba(201,241,88,0.1)] text-[var(--bone)]"
+                  : "border-[var(--line)] bg-[var(--ink2)] text-[var(--mut)] hover:border-[var(--lime)]"
+              }`}
+            >
+              <span className="font-bold mr-3">{String.fromCharCode(65 + idx)}.</span>
+              {option}
+            </button>
+          ))}
+        </div>
+
+        {/* Tugmalar */}
+        <div className="flex gap-3">
+          <button onClick={onClose} className="btn-ghost flex-1">BEKOR QILISH</button>
+          <button 
+            onClick={handleNext} 
+            disabled={selectedAnswer === null}
+            className="btn-lime flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {currentQuestion < questions.length - 1 ? "KEYINGI" : "YAKUNLASH"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ================= VIDEO MODAL ================= */
 function VideoModal({
   lesson, url, isCustom, onClose, onEdit, onRemove,
@@ -560,7 +840,9 @@ function VideoModal({
 
 /* ================= KURS SAHIFASI ================= */
 export function CourseDetail({ id }: { id: string }) {
-  const { user, progress, enroll, toggleLesson, navigate, showToast, videoLinks, setVideoLink, removeVideoLink, customCourses, users } = useApp();
+  const { user, progress, enroll, toggleLesson, navigate, showToast, videoLinks, setVideoLink, removeVideoLink, customCourses, users, mentorMaps, quizResults, saveQuizResult, certificates, addCertificate, hasCertificate, quizMap, finalExamMap } = useApp();
+  const [quizLesson, setQuizLesson] = useState<Lesson | null>(null);
+  const [showFinalExam, setShowFinalExam] = useState(false);
   
   // Asosiy kurs yoki custom kursni topish
   const baseCourse = COURSES.find((c) => c.id === id);
@@ -574,13 +856,43 @@ export function CourseDetail({ id }: { id: string }) {
   
   // Agar custom kurs bo'lsa, uni asosiy kurs bilan birlashtirish
   const course: Course | undefined = useMemo(() => {
+    // Mentor ma'lumotlarini aniqlash
+    const getMentor = () => {
+      if (customCourse?.mentor) return customCourse.mentor;
+      if (mentorMaps[id]) return mentorMaps[id];
+      if (baseCourse) return baseCourse.mentor;
+      return { name: "Admin", role: "O'qituvchi", exp: "" };
+    };
+    
     if (customCourse && baseCourse) {
-      return { ...baseCourse, lessons: customCourse.lessons, hours: Math.round(customCourse.lessons.reduce((s, l) => s + l.dur, 0) / 60) };
+      return { 
+        ...baseCourse, 
+        lessons: customCourse.lessons, 
+        hours: Math.round(customCourse.lessons.reduce((s, l) => s + l.dur, 0) / 60),
+        mentor: getMentor()
+      };
     } else if (customCourse) {
-      return { id: customCourse.id, title: customCourse.title, tag: "Custom", category: "Dasturlash", level: "Noldan", hours: Math.round(customCourse.lessons.reduce((s, l) => s + l.dur, 0) / 60), students: courseStudents, color: customCourse.color, desc: customCourse.desc, skills: [], mentor: { name: "Admin", role: "O'qituvchi", exp: "" }, outcomes: [], lessons: customCourse.lessons };
+      return { 
+        id: customCourse.id, 
+        title: customCourse.title, 
+        tag: "Custom", 
+        category: "Dasturlash", 
+        level: "Noldan", 
+        hours: Math.round(customCourse.lessons.reduce((s, l) => s + l.dur, 0) / 60), 
+        students: courseStudents, 
+        color: customCourse.color, 
+        desc: customCourse.desc, 
+        skills: [], 
+        mentor: getMentor(), 
+        outcomes: [], 
+        lessons: customCourse.lessons 
+      };
     }
-    return baseCourse;
-  }, [baseCourse, customCourse, customCourses, courseStudents]);
+    if (baseCourse) {
+      return { ...baseCourse, mentor: getMentor() };
+    }
+    return undefined;
+  }, [baseCourse, customCourse, customCourses, courseStudents, mentorMaps, id]);
   
   const [openNote, setOpenNote] = useState<string | null>(null);
   const [videoLesson, setVideoLesson] = useState<Lesson | null>(null);
@@ -829,6 +1141,28 @@ export function CourseDetail({ id }: { id: string }) {
                                       <Icon name={noteOpen ? "chevron" : "book"} className={`w-3.5 h-3.5 transition-transform ${noteOpen ? "rotate-180" : ""}`} />
                                     </button>
                                   )}
+                                  {/* test tugmasi */}
+                                  {(quizMap[l.id] || l.quiz) && (quizMap[l.id] || l.quiz).length > 0 && (
+                                    <button
+                                      onClick={() => {
+                                        // quizMap'dan yoki lesson.quiz'dan savollarni olish
+                                        const quiz = quizMap[l.id] || l.quiz || [];
+                                        const lessonWithQuiz = { ...l, quiz };
+                                        setQuizLesson(lessonWithQuiz);
+                                      }}
+                                      aria-label="Test topshirish"
+                                      title="Test topshirish"
+                                      className={`shrink-0 w-8 h-8 rounded-lg border flex items-center justify-center transition-all cursor-pointer ${
+                                        quizResults[l.id]?.passed
+                                          ? "border-[rgba(201,241,88,0.5)] text-[var(--lime)] bg-[rgba(201,241,88,0.08)]"
+                                          : quizResults[l.id]
+                                          ? "border-[rgba(255,107,94,0.5)] text-[var(--coral)] bg-[rgba(255,107,94,0.08)]"
+                                          : "border-[var(--amber)] text-[var(--amber)] hover:bg-[rgba(255,154,60,0.12)]"
+                                      }`}
+                                    >
+                                      <Icon name="target" className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
                                 </div>
 
                                 {/* video qo'shish formasi */}
@@ -893,12 +1227,40 @@ export function CourseDetail({ id }: { id: string }) {
                       <div className="h-full rounded-full bar-grow" style={{ width: `${Math.max(pct, 3)}%`, background: course.color }} />
                     </div>
                     <p className="mt-3 text-[0.78rem] text-[var(--mut)]">{done.length} / {course.lessons.length} dars bajarildi</p>
-                    {pct === 100 && (
+                    
+                    {/* Yakuniy imtihon tugmasi - faqat barcha darslar bajarilganda */}
+                    {pct === 100 && (finalExamMap[course.id] || course.finalExam) && !hasCertificate(course.id) && (
+                      <button 
+                        onClick={() => setShowFinalExam(true)}
+                        className="w-full mt-5 py-4 rounded-xl bg-gradient-to-r from-[var(--amber)] to-[var(--coral)] text-[var(--ink)] font-d font-bold text-[0.85rem] hover:opacity-90 transition-opacity cursor-pointer flex items-center justify-center gap-2"
+                      >
+                        <Icon name="award" className="w-5 h-5" /> YAKUNIY IMTIHON TOPSHIRISH
+                      </button>
+                    )}
+                    
+                    {/* Sertifikat - faqat imtihondan o'tganda */}
+                    {hasCertificate(course.id) && (
                       <div className="mt-5 rounded-xl bg-[rgba(201,241,88,0.1)] border border-[rgba(201,241,88,0.4)] p-4 flex items-center gap-3">
                         <Icon name="award" className="w-7 h-7 text-[var(--lime)]" />
-                        <p className="text-[0.82rem] font-semibold">Tabriklaymiz! Kurs yakunlandi — sertifikat kabinetingizda 🏆</p>
+                        <div>
+                          <p className="text-[0.82rem] font-semibold text-[var(--lime)]">Sertifikat olindi! 🏆</p>
+                          <p className="text-[0.7rem] text-[var(--mut)]">Kabinetdan yuklab olishingiz mumkin</p>
+                        </div>
                       </div>
                     )}
+                    
+                    {/* Darslar ko'rilishi kerakligi haqida ogohlantirish */}
+                    {pct < 100 && (
+                      <div className="mt-5 rounded-xl bg-[rgba(255,154,60,0.08)] border border-[rgba(255,154,60,0.3)] p-4">
+                        <p className="text-[0.78rem] text-[var(--amber)] font-semibold mb-2">📚 Sertifikat olish uchun:</p>
+                        <ul className="text-[0.72rem] text-[var(--mut)] space-y-1">
+                          <li>• Barcha darslarni ko'rib chiqing ({done.length}/{course.lessons.length})</li>
+                          <li>• Har bir dars testini topshiring</li>
+                          <li>• Yakuniy imtihondan o'ting (70%+)</li>
+                        </ul>
+                      </div>
+                    )}
+                    
                     <button onClick={() => navigate("/assistant")} className="btn-ghost w-full justify-center mt-5 group">
                       <Icon name="brain" className="w-4 h-4 text-[var(--lime)]" /> AI'DAN SAVOL SO'RASH
                     </button>
@@ -986,6 +1348,56 @@ export function CourseDetail({ id }: { id: string }) {
             />
           );
         })()}
+      
+      {/* test oynasi */}
+      {quizLesson && (
+        <QuizModal
+          lesson={quizLesson}
+          onClose={() => setQuizLesson(null)}
+          onComplete={(score, passed) => {
+            saveQuizResult(quizLesson.id, score, passed);
+            if (passed) {
+              showToast(`✅ Test muvaffaqiyatli topshirildi! Natija: ${score}%`);
+              // Darsni bajarilgan deb belgilash
+              if (prog && !done.includes(quizLesson.id)) {
+                toggleLesson(course.id, quizLesson.id);
+              }
+            } else {
+              showToast(`❌ Test topshirilmadi. Natija: ${score}%. Qaytadan urinib ko'ring.`);
+            }
+          }}
+        />
+      )}
+      
+      {/* yakuniy imtihon oynasi */}
+      {showFinalExam && course && (
+        <FinalExamModal
+          course={{
+            ...course,
+            finalExam: finalExamMap[course.id] || course.finalExam
+          }}
+          onClose={() => setShowFinalExam(false)}
+          onComplete={(score, passed) => {
+            if (passed && user) {
+              // Sertifikat yaratish
+              const certId = `CERT-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+              addCertificate({
+                id: certId,
+                courseId: course.id,
+                courseTitle: course.title,
+                userName: user.name,
+                userEmail: user.email,
+                score: score,
+                completedAt: new Date().toISOString(),
+                certificateId: certId
+              });
+              showToast(`🏆 Tabriklaymiz! Sertifikat olindi! ID: ${certId}`);
+            } else {
+              showToast(`❌ Imtihon topshirilmadi. Natija: ${score}%. Qaytadan urinib ko'ring.`);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import type { QuizQuestion, FinalExam } from "./data";
 
 /* ================= KIBERXAVFSIZLIK - 2000TB HIMOYA TIZIMI ================= */
 
@@ -175,8 +176,46 @@ export interface ProgressMap {
   [courseId: string]: { enrolledAt: string; done: string[] };
 }
 
+interface QuizResultsMap {
+  [lessonId: string]: {
+    score: number;
+    passed: boolean;
+    completedAt: string;
+  };
+}
+
+interface Certificate {
+  id: string;
+  courseId: string;
+  courseTitle: string;
+  userName: string;
+  userEmail: string;
+  score: number;
+  completedAt: string;
+  certificateId: string;
+}
+
 interface VideoMap {
   [lessonId: string]: string;
+}
+
+/* Test savollari */
+interface QuizMap {
+  [lessonId: string]: QuizQuestion[];
+}
+
+/* Yakuniy imtihon savollari */
+interface FinalExamMap {
+  [courseId: string]: FinalExam;
+}
+
+/* Asosiy kurslar uchun mentor ma'lumotlari (admin tomonidan o'zgartirilishi mumkin) */
+interface MentorMap {
+  [courseId: string]: {
+    name: string;
+    role: string;
+    exp: string;
+  };
 }
 
 /* Admin qo'shgan maxsus kurslar */
@@ -185,6 +224,7 @@ export interface CustomLesson {
   title: string;
   dur: number;
   type: "Video" | "Amaliyot" | "Jonli" | "Test";
+  quiz?: QuizQuestion[];
 }
 
 export interface CustomCourse {
@@ -195,6 +235,11 @@ export interface CustomCourse {
   lessons: CustomLesson[];
   createdAt: string;
   duration?: number; // umumiy davomiylik (daqiqa)
+  mentor?: {
+    name: string;
+    role: string;
+    exp: string;
+  };
 }
 
 interface CustomCoursesMap {
@@ -234,6 +279,22 @@ interface AppCtx {
   /* AI sozlamalari */
   aiConfig: { provider: "gemini" | "qwen" | "local"; apiKey: string };
   setAiConfig: (config: { provider: "gemini" | "qwen" | "local"; apiKey: string }) => void;
+  /* Mentor ma'lumotlari */
+  mentorMaps: MentorMap;
+  updateMentor: (courseId: string, mentor: { name: string; role: string; exp: string }) => void;
+  /* Test va sertifikatlar */
+  quizResults: QuizResultsMap;
+  saveQuizResult: (lessonId: string, score: number, passed: boolean) => void;
+  certificates: Certificate[];
+  addCertificate: (cert: Certificate) => void;
+  hasCertificate: (courseId: string) => boolean;
+  /* Test savollari boshqaruvi */
+  quizMap: QuizMap;
+  setQuizForLesson: (lessonId: string, questions: QuizQuestion[]) => void;
+  removeQuizFromLesson: (lessonId: string) => void;
+  finalExamMap: FinalExamMap;
+  setFinalExamForCourse: (courseId: string, exam: FinalExam) => void;
+  removeFinalExamFromCourse: (courseId: string) => void;
 }
 
 const Ctx = createContext<AppCtx | null>(null);
@@ -270,6 +331,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [customCourses, setCustomCourses] = useState<CustomCoursesMap>(() => load("razzoq_custom_courses", {} as CustomCoursesMap));
   const [aiConfig, setAiConfig] = useState<{ provider: "gemini" | "qwen" | "local"; apiKey: string }>(() => 
     load("razzoq_ai_config", { provider: "local", apiKey: "" })
+  );
+  const [mentorMaps, setMentorMaps] = useState<MentorMap>(() => 
+    load("razzoq_mentors", {} as MentorMap)
+  );
+  const [quizResults, setQuizResults] = useState<QuizResultsMap>(() => 
+    load("razzoq_quiz_results", {} as QuizResultsMap)
+  );
+  const [certificates, setCertificates] = useState<Certificate[]>(() => 
+    load("razzoq_certificates", [] as Certificate[])
+  );
+  const [quizMap, setQuizMap] = useState<QuizMap>(() => 
+    load("razzoq_quiz_map", {} as QuizMap)
+  );
+  const [finalExamMap, setFinalExamMap] = useState<FinalExamMap>(() => 
+    load("razzoq_final_exam_map", {} as FinalExamMap)
   );
   const [toast, setToast] = useState<string | null>(null);
 
@@ -340,6 +416,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     save("razzoq_ai_config", aiConfig);
   }, [aiConfig]);
+
+  useEffect(() => {
+    save("razzoq_mentors", mentorMaps);
+  }, [mentorMaps]);
+
+  useEffect(() => {
+    save("razzoq_quiz_results", quizResults);
+  }, [quizResults]);
+
+  useEffect(() => {
+    save("razzoq_certificates", certificates);
+  }, [certificates]);
+
+  useEffect(() => {
+    save("razzoq_quiz_map", quizMap);
+  }, [quizMap]);
+
+  useEffect(() => {
+    save("razzoq_final_exam_map", finalExamMap);
+  }, [finalExamMap]);
 
   /* oxirgi faollikni yozib qo'yish */
   useEffect(() => {
@@ -587,6 +683,55 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  /* ---- mentor ma'lumotlarini yangilash ---- */
+  const updateMentor = useCallback((courseId: string, mentor: { name: string; role: string; exp: string }) => {
+    setMentorMaps((p) => ({ ...p, [courseId]: mentor }));
+  }, []);
+
+  /* ---- test natijalarini saqlash ---- */
+  const saveQuizResult = useCallback((lessonId: string, score: number, passed: boolean) => {
+    setQuizResults((p) => ({
+      ...p,
+      [lessonId]: { score, passed, completedAt: new Date().toISOString() }
+    }));
+  }, []);
+
+  /* ---- sertifikat qo'shish ---- */
+  const addCertificate = useCallback((cert: Certificate) => {
+    setCertificates((p) => [...p, cert]);
+  }, []);
+
+  /* ---- sertifikat borligini tekshirish ---- */
+  const hasCertificate = useCallback((courseId: string) => {
+    return certificates.some((c) => c.courseId === courseId);
+  }, [certificates]);
+
+  /* ---- test savollarini saqlash ---- */
+  const setQuizForLesson = useCallback((lessonId: string, questions: QuizQuestion[]) => {
+    setQuizMap((p) => ({ ...p, [lessonId]: questions }));
+  }, []);
+
+  const removeQuizFromLesson = useCallback((lessonId: string) => {
+    setQuizMap((p) => {
+      const n = { ...p };
+      delete n[lessonId];
+      return n;
+    });
+  }, []);
+
+  /* ---- yakuniy imtihonni saqlash ---- */
+  const setFinalExamForCourse = useCallback((courseId: string, exam: FinalExam) => {
+    setFinalExamMap((p) => ({ ...p, [courseId]: exam }));
+  }, []);
+
+  const removeFinalExamFromCourse = useCallback((courseId: string) => {
+    setFinalExamMap((p) => {
+      const n = { ...p };
+      delete n[courseId];
+      return n;
+    });
+  }, []);
+
   /* ---- toast ---- */
   const showToast = useCallback((t: string) => {
     setToast(t);
@@ -601,6 +746,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         chatLog, pushChat, clearChat, toast, showToast, deleteUser, setUserRole, deleteMyAccount,
         customCourses, addCustomCourse, removeCustomCourse, updateCustomCourse, addLessonToCourse, removeLessonFromCourse, updateLessonInCourse,
         aiConfig, setAiConfig,
+        mentorMaps, updateMentor,
+        quizResults, saveQuizResult,
+        certificates, addCertificate, hasCertificate,
+        quizMap, setQuizForLesson, removeQuizFromLesson,
+        finalExamMap, setFinalExamForCourse, removeFinalExamFromCourse,
       }}
     >
       {children}
