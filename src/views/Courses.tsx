@@ -674,7 +674,7 @@ function VideoModal({
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+    return { mins: mins.toString().padStart(2, '0'), secs: secs.toString().padStart(2, '0') };
   };
 
   const v = parseVideo(videoSrc || url);
@@ -790,10 +790,29 @@ function VideoModal({
                       </svg>
                     </button>
 
-                    {/* Time Display */}
-                    <span className="text-sm font-mono">
-                      {formatTime(currentTime)} / {formatTime(duration)}
-                    </span>
+                    {/* Time Display - Soat kabi ko'rinish */}
+                    <div className="flex items-center gap-1 font-mono">
+                      {/* Joriy vaqt */}
+                      <div className="flex items-center gap-0.5">
+                        <span className="bg-black/40 px-1.5 py-0.5 rounded text-lg font-bold text-white border border-white/10">{formatTime(currentTime).mins[0]}</span>
+                        <span className="bg-black/40 px-1.5 py-0.5 rounded text-lg font-bold text-white border border-white/10">{formatTime(currentTime).mins[1]}</span>
+                        <span className="text-white font-bold mx-0.5">:</span>
+                        <span className="bg-black/40 px-1.5 py-0.5 rounded text-sm text-white/80 border border-white/10">{formatTime(currentTime).secs[0]}</span>
+                        <span className="bg-black/40 px-1.5 py-0.5 rounded text-sm text-white/80 border border-white/10">{formatTime(currentTime).secs[1]}</span>
+                      </div>
+                      
+                      {/* Ajratgich */}
+                      <span className="text-white/40 mx-1.5">/</span>
+                      
+                      {/* Umumiy vaqt */}
+                      <div className="flex items-center gap-0.5">
+                        <span className="bg-black/40 px-1.5 py-0.5 rounded text-lg font-bold text-white/60 border border-white/10">{formatTime(duration).mins[0]}</span>
+                        <span className="bg-black/40 px-1.5 py-0.5 rounded text-lg font-bold text-white/60 border border-white/10">{formatTime(duration).mins[1]}</span>
+                        <span className="text-white/40 font-bold mx-0.5">:</span>
+                        <span className="bg-black/40 px-1.5 py-0.5 rounded text-sm text-white/50 border border-white/10">{formatTime(duration).secs[0]}</span>
+                        <span className="bg-black/40 px-1.5 py-0.5 rounded text-sm text-white/50 border border-white/10">{formatTime(duration).secs[1]}</span>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-3">
@@ -1108,7 +1127,7 @@ export function CourseDetail({ id }: { id: string }) {
                           <div className="flex-1 min-w-0">
                             <p className={`text-[0.86rem] sm:text-[0.88rem] font-semibold truncate ${checked ? "line-through text-[var(--mut)]" : ""}`}>{l.title}</p>
                             <p className="text-[0.66rem] sm:text-[0.68rem] font-mono text-[var(--dim)] mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
-                              <span>{l.dur} daqiqa</span>
+                              <span>{Math.floor(l.dur / 60)}:{(l.dur % 60).toString().padStart(2, '0')} ({Math.floor(l.dur / 60)} minut {l.dur % 60} soniya)</span>
                               <span style={{ color: l.type === "Jonli" ? "var(--coral)" : l.type === "Amaliyot" ? "var(--amber)" : l.type === "Test" ? "var(--teal)" : "var(--mut)" }}>{l.type}</span>
                               {hasNote && <span className="text-[var(--teal)] hidden sm:inline">yozma darslik</span>}
                               {videoUrl && <span className="text-[var(--coral)] hidden sm:inline">video bor</span>}

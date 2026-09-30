@@ -50,7 +50,7 @@ export const COURSES: Course[] = [
     color: "#C9F158",
     desc: "Front-End dasturlash kursi — HTML, CSS, JavaScript va React. Admin tomonidan darslar qo'shiladi.",
     skills: ["HTML5", "CSS3", "JavaScript", "React JS", "Git & GitHub", "Flexbox & Grid"],
-    mentor: { name: "Abdurazzoq Olimjonov", role: "Front-End o'qituvchisi", exp: "2 yillik tajriba" },
+    mentor: { name: "", role: "", exp: "" },
     outcomes: [
       "Istalgan dizayn-maketni HTML/CSS'da kodga aylantirish",
       "JavaScript'da dinamik va interaktiv ilovalar yozish",

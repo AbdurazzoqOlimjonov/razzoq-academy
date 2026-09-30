@@ -316,7 +316,7 @@ export default function Dashboard() {
                         {next && (
                           <p className="mt-3 text-[0.76rem] text-[var(--mut)] flex items-center gap-2">
                             <Icon name="play" className="w-3.5 h-3.5 text-[var(--lime)]" />
-                            Keyingi dars: <strong className="text-[var(--bone)] font-semibold">{next.title}</strong> · {next.dur} daqiqa
+                            Keyingi dars: <strong className="text-[var(--bone)] font-semibold">{next.title}</strong> · {Math.floor(next.dur / 60)}:{(next.dur % 60).toString().padStart(2, '0')} ({Math.floor(next.dur / 60)} minut {next.dur % 60} soniya)
                           </p>
                         )}
                       </div>

@@ -633,7 +633,7 @@ export default function Admin() {
                         <p className="mt-3 text-[0.78rem] text-[var(--mut)] line-clamp-2">{c.desc}</p>
                         <div className="mt-3 flex flex-wrap gap-3 text-[0.66rem] font-mono text-[var(--dim)]">
                           <span>Qo'shilgan: {fmtDate(c.createdAt)}</span>
-                          {c.duration && <span>• Davomiylik: {c.duration} daqiqa</span>}
+                          {c.duration && <span>• Davomiylik: {c.duration} minut</span>}
                         </div>
                       </div>
                     </Reveal>
@@ -664,7 +664,7 @@ export default function Admin() {
                     </div>
                   </div>
                   <div>
-                    <label className="block font-mono text-[0.66rem] uppercase tracking-widest text-[var(--mut)] mb-2">Umumiy davomiylik (daqiqa)</label>
+                    <label className="block font-mono text-[0.66rem] uppercase tracking-widest text-[var(--mut)] mb-2">Umumiy davomiylik (minut)</label>
                     <input type="number" value={newCourseDuration} onChange={(e) => setNewCourseDuration(Number(e.target.value))} placeholder="Masalan: 120" className="field !py-2.5 !text-[0.85rem]" />
                   </div>
                   
@@ -744,7 +744,7 @@ export default function Admin() {
                     </div>
                   </div>
                   <div>
-                    <label className="block font-mono text-[0.66rem] uppercase tracking-widest text-[var(--mut)] mb-2">Umumiy davomiylik (daqiqa)</label>
+                    <label className="block font-mono text-[0.66rem] uppercase tracking-widest text-[var(--mut)] mb-2">Umumiy davomiylik (minut)</label>
                     <input type="number" value={editCourseDuration} onChange={(e) => setEditCourseDuration(Number(e.target.value))} placeholder="Masalan: 120" className="field !py-2.5 !text-[0.85rem]" />
                   </div>
                   
@@ -845,7 +845,9 @@ export default function Admin() {
                         <span className="font-mono text-[0.7rem] text-[var(--dim)] w-8">{String(i + 1).padStart(2, "0")}</span>
                         <div className="flex-1 min-w-[150px]">
                           <p className="font-semibold text-[0.88rem]">{l.title}</p>
-                          <p className="text-[0.68rem] font-mono text-[var(--mut)] mt-0.5">{l.dur} daqiqa · {l.type}</p>
+                          <p className="text-[0.68rem] font-mono text-[var(--mut)] mt-0.5">
+                            {Math.floor(l.dur / 60)}:{(l.dur % 60).toString().padStart(2, '0')} ({Math.floor(l.dur / 60)} minut {l.dur % 60} soniya) · {l.type}
+                          </p>
                         </div>
                         <div className="flex items-center gap-2">
                           <button onClick={() => {
@@ -1390,8 +1392,11 @@ export default function Admin() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block font-mono text-[0.66rem] uppercase tracking-widest text-[var(--mut)] mb-2">Davomiyligi (daqiqa)</label>
+                      <label className="block font-mono text-[0.66rem] uppercase tracking-widest text-[var(--mut)] mb-2">Davomiyligi (soniya)</label>
                       <input type="number" value={newLessonDur} onChange={(e) => setNewLessonDur(Number(e.target.value))} className="field !py-2.5 !text-[0.85rem]" />
+                      <p className="text-[0.6rem] text-[var(--dim)] mt-1">
+                        {newLessonDur > 0 && `${Math.floor(newLessonDur / 60)}:${(newLessonDur % 60).toString().padStart(2, '0')} (${Math.floor(newLessonDur / 60)} minut ${newLessonDur % 60} soniya)`}
+                      </p>
                     </div>
                     <div>
                       <label className="block font-mono text-[0.66rem] uppercase tracking-widest text-[var(--mut)] mb-2">Turi</label>
@@ -1430,8 +1435,11 @@ export default function Admin() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block font-mono text-[0.66rem] uppercase tracking-widest text-[var(--mut)] mb-2">Davomiyligi (daqiqa)</label>
+                      <label className="block font-mono text-[0.66rem] uppercase tracking-widest text-[var(--mut)] mb-2">Davomiyligi (soniya)</label>
                       <input type="number" value={editLessonDur} onChange={(e) => setEditLessonDur(Number(e.target.value))} className="field !py-2.5 !text-[0.85rem]" />
+                      <p className="text-[0.6rem] text-[var(--dim)] mt-1">
+                        {editLessonDur > 0 && `${Math.floor(editLessonDur / 60)}:${(editLessonDur % 60).toString().padStart(2, '0')} (${Math.floor(editLessonDur / 60)} minut ${editLessonDur % 60} soniya)`}
+                      </p>
                     </div>
                     <div>
                       <label className="block font-mono text-[0.66rem] uppercase tracking-widest text-[var(--mut)] mb-2">Turi</label>
